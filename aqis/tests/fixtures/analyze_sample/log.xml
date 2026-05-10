@@ -1,0 +1,17 @@
+<Root>
+  <TestName>sales_quote_search</TestName>
+  <Step>
+    <StepName>Open Quotations</StepName>
+    <ExecutedProperty>id=quotation-page</ExecutedProperty>
+    <Timing>120</Timing>
+    <Label>Sales Quotation</Label>
+    <ErrorMessage></ErrorMessage>
+  </Step>
+  <Step>
+    <StepName>Enter Sales Quotation value</StepName>
+    <ExecutedProperty>xpath=//input[@id='quotation-input']</ExecutedProperty>
+    <Timing>245</Timing>
+    <Label>Sales Quotation</Label>
+    <ErrorMessage>NoSuchElementException</ErrorMessage>
+  </Step>
+</Root>

@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aqis-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aqis-web
+  template:
+    metadata:
+      labels:
+        app: aqis-web
+    spec:
+      containers:
+        - name: aqis-web
+          image: your-registry/aqis-web:latest
+          ports:
+            - containerPort: 80

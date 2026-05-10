@@ -1,0 +1,38 @@
+services:
+  python-api:
+    build:
+      context: .
+      dockerfile: services/python_api/Dockerfile
+    env_file:
+      - config/dev.env
+    environment:
+      ENV: DEV
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8000/health/live"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  java-gateway:
+    build:
+      context: .
+      dockerfile: services/java-gateway/Dockerfile
+    environment:
+      AQIS_PYTHON_BASE_URL: http://python-api:8000
+    depends_on:
+      python-api:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    depends_on:
+      java-gateway:
+        condition: service_started
+    ports:
+      - "5173:80"

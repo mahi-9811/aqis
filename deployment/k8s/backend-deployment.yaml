@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aqis-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aqis-backend
+  template:
+    metadata:
+      labels:
+        app: aqis-backend
+    spec:
+      containers:
+        - name: aqis-backend
+          image: your-registry/aqis-backend:latest
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: aqis-config
+            - secretRef:
+                name: aqis-secrets
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 8000
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 8000

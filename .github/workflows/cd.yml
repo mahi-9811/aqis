@@ -1,0 +1,158 @@
+name: CD
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  publish-images:
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.tags.outputs.image_tag }}
+      python_image: ${{ steps.images.outputs.python_image }}
+      gateway_image: ${{ steps.images.outputs.gateway_image }}
+      web_image: ${{ steps.images.outputs.web_image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve image names
+        id: images
+        shell: bash
+        run: |
+          namespace="${GITHUB_REPOSITORY,,}"
+          echo "IMAGE_NAMESPACE=${namespace}" >> "$GITHUB_ENV"
+          echo "python_image=${REGISTRY}/${namespace}/python-api" >> "$GITHUB_OUTPUT"
+          echo "gateway_image=${REGISTRY}/${namespace}/java-gateway" >> "$GITHUB_OUTPUT"
+          echo "web_image=${REGISTRY}/${namespace}/web" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve image tag
+        id: tags
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            tag="${GITHUB_REF_NAME}"
+          else
+            tag="${GITHUB_SHA}"
+          fi
+          echo "IMAGE_TAG=${tag}" >> "$GITHUB_ENV"
+          echo "image_tag=${tag}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Python API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: services/python_api/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.images.outputs.python_image }}:${{ steps.tags.outputs.image_tag }}
+            ${{ steps.images.outputs.python_image }}:latest
+
+      - name: Build and push Java gateway image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: services/java-gateway/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.images.outputs.gateway_image }}:${{ steps.tags.outputs.image_tag }}
+            ${{ steps.images.outputs.gateway_image }}:latest
+
+      - name: Build and push web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.images.outputs.web_image }}:${{ steps.tags.outputs.image_tag }}
+            ${{ steps.images.outputs.web_image }}:latest
+
+  deploy-dev:
+    runs-on: ubuntu-latest
+    needs: publish-images
+    if: ${{ vars.DEPLOY_ENABLED == 'true' }}
+    environment: dev
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy production compose file
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          source: deployment/docker-compose.prod.yml
+          target: ${{ vars.DEPLOY_PATH }}
+          strip_components: 1
+
+      - name: Deploy with Docker Compose
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          REGISTRY: ${{ env.REGISTRY }}
+          DEPLOY_REGISTRY_USERNAME: ${{ secrets.DEPLOY_REGISTRY_USERNAME }}
+          DEPLOY_REGISTRY_TOKEN: ${{ secrets.DEPLOY_REGISTRY_TOKEN }}
+          IMAGE_TAG: ${{ needs.publish-images.outputs.image_tag }}
+          PYTHON_API_IMAGE: ${{ needs.publish-images.outputs.python_image }}
+          JAVA_GATEWAY_IMAGE: ${{ needs.publish-images.outputs.gateway_image }}
+          WEB_IMAGE: ${{ needs.publish-images.outputs.web_image }}
+          AQIS_GATEWAY_AUTH_ENABLED: ${{ vars.AQIS_GATEWAY_AUTH_ENABLED || 'false' }}
+          AQIS_GATEWAY_API_KEY: ${{ secrets.AQIS_GATEWAY_API_KEY }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          envs: REGISTRY,DEPLOY_REGISTRY_USERNAME,DEPLOY_REGISTRY_TOKEN,IMAGE_TAG,PYTHON_API_IMAGE,JAVA_GATEWAY_IMAGE,WEB_IMAGE,AQIS_GATEWAY_AUTH_ENABLED,AQIS_GATEWAY_API_KEY
+          script: |
+            set -euo pipefail
+            cd "${{ vars.DEPLOY_PATH }}"
+            if [ -n "${DEPLOY_REGISTRY_USERNAME}" ] && [ -n "${DEPLOY_REGISTRY_TOKEN}" ]; then
+              echo "${DEPLOY_REGISTRY_TOKEN}" | docker login "${REGISTRY}" -u "${DEPLOY_REGISTRY_USERNAME}" --password-stdin
+            fi
+            cat > .env <<EOF
+            IMAGE_TAG=${IMAGE_TAG}
+            PYTHON_API_IMAGE=${PYTHON_API_IMAGE}
+            JAVA_GATEWAY_IMAGE=${JAVA_GATEWAY_IMAGE}
+            WEB_IMAGE=${WEB_IMAGE}
+            AQIS_GATEWAY_AUTH_ENABLED=${AQIS_GATEWAY_AUTH_ENABLED}
+            AQIS_GATEWAY_API_KEY=${AQIS_GATEWAY_API_KEY}
+            EOF
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            docker image prune -f
+
+  smoke-test:
+    runs-on: ubuntu-latest
+    needs:
+      - publish-images
+      - deploy-dev
+    if: ${{ always() && needs.publish-images.result == 'success' && (needs.deploy-dev.result == 'success' || needs.deploy-dev.result == 'skipped') && vars.SMOKE_BASE_URL != '' }}
+    steps:
+      - name: Check Python API health
+        run: curl --fail --retry 6 --retry-delay 10 --max-time 10 "${{ vars.SMOKE_BASE_URL }}/health/live"
+
+      - name: Check gateway health
+        if: ${{ vars.SMOKE_GATEWAY_URL != '' }}
+        run: curl --fail --retry 6 --retry-delay 10 --max-time 10 "${{ vars.SMOKE_GATEWAY_URL }}/actuator/health"
+
+      - name: Check web app
+        if: ${{ vars.SMOKE_WEB_URL != '' }}
+        run: curl --fail --retry 6 --retry-delay 10 --max-time 10 "${{ vars.SMOKE_WEB_URL }}"

@@ -1,0 +1,7 @@
+Retrying action because page was still loading
+Retrying action because element was missing
+Exception: No such element found
+AutoHeal: failed locator recovery
+DriftSignal: locator_mismatch
+Current screen is not appropriate
+not able to scan the page

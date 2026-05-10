@@ -1,0 +1,35 @@
+services:
+  python-api:
+    image: ${PYTHON_API_IMAGE}:${IMAGE_TAG}
+    restart: unless-stopped
+    environment:
+      ENV: PROD
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8000/health/live"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  java-gateway:
+    image: ${JAVA_GATEWAY_IMAGE}:${IMAGE_TAG}
+    restart: unless-stopped
+    environment:
+      AQIS_PYTHON_BASE_URL: http://python-api:8000
+      AQIS_GATEWAY_AUTH_ENABLED: ${AQIS_GATEWAY_AUTH_ENABLED:-false}
+      AQIS_GATEWAY_API_KEY: ${AQIS_GATEWAY_API_KEY:-}
+    depends_on:
+      python-api:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+
+  web:
+    image: ${WEB_IMAGE}:${IMAGE_TAG}
+    restart: unless-stopped
+    depends_on:
+      java-gateway:
+        condition: service_started
+    ports:
+      - "5173:80"

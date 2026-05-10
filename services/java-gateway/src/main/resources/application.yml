@@ -1,0 +1,17 @@
+server:
+  port: 8080
+
+aqis:
+  gateway:
+    auth:
+      enabled: ${AQIS_GATEWAY_AUTH_ENABLED:false}
+      header-name: ${AQIS_GATEWAY_AUTH_HEADER:X-AQIS-API-Key}
+      api-key: ${AQIS_GATEWAY_API_KEY:}
+  python:
+    base-url: ${AQIS_PYTHON_BASE_URL:http://localhost:8000}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
