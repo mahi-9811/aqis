@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from typing import Any
 
 from aqis.learning.embedding_generator import EmbeddingGenerator
@@ -26,7 +26,7 @@ def update_knowledge(
     generated_tests: dict[str, Any] | None = None,
     feedback: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S.%fZ")
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
     failure = agent_output.get("agents", {}).get("failureAnalyzer", {})
     validation = agent_output.get("agents", {}).get("validation", {})
 
@@ -78,8 +78,8 @@ def record_feedback(payload: dict[str, Any]) -> dict[str, Any]:
     base_confidence = _bounded_float(payload.get("confidenceScore", 0.0))
     adjusted_confidence = round(max(0.0, min(1.0, base_confidence + feedback_weight)), 3)
     entry = {
-        "id": f"feedback::{test_name}::{datetime.now(UTC).strftime('%Y%m%dT%H%M%S.%fZ')}",
-        "timestamp": datetime.now(UTC).strftime("%Y%m%dT%H%M%S.%fZ"),
+        "id": f"feedback::{test_name}::{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S.%fZ')}",
+        "timestamp": datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ"),
         "testName": test_name,
         "failureCategory": payload.get("failureCategory"),
         "feedback": {

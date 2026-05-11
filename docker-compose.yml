@@ -3,36 +3,69 @@ services:
     build:
       context: .
       dockerfile: services/python_api/Dockerfile
+    container_name: python-api
     env_file:
       - config/dev.env
     environment:
-      ENV: DEV
+      ENV: PROD
     ports:
       - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./services/python_api:/app/services/python_api
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8000/health/live"]
       interval: 30s
       timeout: 5s
       retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - aqis-network
 
   java-gateway:
     build:
       context: .
       dockerfile: services/java-gateway/Dockerfile
+    container_name: java-gateway
     environment:
       AQIS_PYTHON_BASE_URL: http://python-api:8000
+      SPRING_PROFILES_ACTIVE: docker
     depends_on:
       python-api:
         condition: service_healthy
     ports:
       - "8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+    networks:
+      - aqis-network
 
   web:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+    container_name: web
     depends_on:
       java-gateway:
-        condition: service_started
+        condition: service_healthy
     ports:
       - "5173:80"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - aqis-network
+
+networks:
+  aqis-network:
+    driver: bridge

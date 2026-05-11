@@ -5,17 +5,37 @@ import xml.etree.ElementTree as ET
 
 XML_DECLARATION_RE = re.compile(br"^\s*<\?xml[^>]*\?>", re.IGNORECASE)
 
+# Invalid XML 1.0 characters (control chars except tab/newline/carriage-return)
+_INVALID_XML_CHARS_RE = re.compile(
+    rb"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]"
+)
+
+
+def _sanitize(xml_bytes: bytes) -> bytes:
+    """Strip invalid XML 1.0 control characters and fix common encoding issues."""
+    # Remove invalid control characters
+    xml_bytes = _INVALID_XML_CHARS_RE.sub(b"", xml_bytes)
+    # Escape bare & that are not already part of an entity reference
+    xml_bytes = re.sub(rb"&(?!(?:[a-zA-Z][a-zA-Z0-9]*|#[0-9]+|#x[0-9a-fA-F]+);)", b"&amp;", xml_bytes)
+    return xml_bytes
+
 
 def _parse_root(xml_bytes: bytes) -> ET.Element:
     try:
         return ET.fromstring(xml_bytes)
     except ET.ParseError as exc:
         message = str(exc).lower()
-        if "encoding specified in xml declaration is incorrect" not in message:
-            raise
+        # Retry without XML declaration when encoding declared disagrees with bytes
+        if "encoding specified in xml declaration is incorrect" in message:
+            xml_bytes = XML_DECLARATION_RE.sub(b"", xml_bytes, count=1)
+            try:
+                return ET.fromstring(xml_bytes)
+            except ET.ParseError:
+                pass
 
-    # Retry without the XML declaration when the bytes and declared encoding disagree.
-    sanitized = XML_DECLARATION_RE.sub(b"", xml_bytes, count=1)
+    # Retry after sanitizing invalid characters and bare ampersands
+    sanitized = _sanitize(xml_bytes)
+    sanitized = XML_DECLARATION_RE.sub(b"", sanitized, count=1)
     return ET.fromstring(sanitized)
 
 

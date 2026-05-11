@@ -70,6 +70,11 @@ button {
   gap: 10px;
 }
 
+.nav-links button.nav-active {
+  background: #111827;
+  color: #fff;
+}
+
 .nav-links button,
 .secondary-button {
   background: rgba(17, 24, 39, 0.08);

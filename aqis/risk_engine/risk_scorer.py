@@ -15,28 +15,33 @@ def compute_risk_score(features: Dict[str, Any], trends: Dict[str, Any]) -> Dict
     Combine feature + trend signals into a risk score between 0.0 and 1.0.
 
     Weights:
-      0.25 driftScore
-      0.20 retryTrend
-      0.20 autoHealDeterioration
+      0.20 driftScore
+      0.15 retryTrend (direction)
+      0.20 retryVolume (absolute retry count)
+      0.15 autoHealDeterioration
       0.15 timingSlopeNormalized
-      0.20 uiErrorSpike
+      0.15 uiErrorSpike
     """
     reasons: List[str] = []
 
     drift_score = float(features.get("driftScore", 0.0))
-    # normalize drift score to 0..1 with heuristic (cap)
     drift_norm = min(1.0, drift_score / 5.0)
 
     retry_trend_flag = _trend_flag(trends.get("retryTrend", "stable"))
     if retry_trend_flag > 0:
         reasons.append("retry trend indicates instability")
 
+    # Absolute retry volume: normalize against a cap of 10 retries = full score
+    retry_count = float(features.get("retries", 0.0))
+    retry_volume = min(1.0, retry_count / 10.0)
+    if retry_count >= 5:
+        reasons.append(f"high retry count ({int(retry_count)})")
+
     autoheal_flag = 1.0 if trends.get("autoHealDeterioration", False) else 0.0
     if autoheal_flag:
         reasons.append("auto-heal failures increasing")
 
     timing_slope = float(trends.get("timingSlope", 0.0))
-    # normalize timing slope by a heuristic divisor
     timing_norm = min(1.0, abs(timing_slope) / 100.0)
 
     ui_spike_flag = 1.0 if trends.get("uiErrorSpike", False) else 0.0
@@ -45,11 +50,12 @@ def compute_risk_score(features: Dict[str, Any], trends: Dict[str, Any]) -> Dict
 
     # build weighted score
     risk = (
-        0.25 * drift_norm
-        + 0.20 * retry_trend_flag
-        + 0.20 * autoheal_flag
+        0.20 * drift_norm
+        + 0.15 * retry_trend_flag
+        + 0.20 * retry_volume
+        + 0.15 * autoheal_flag
         + 0.15 * timing_norm
-        + 0.20 * ui_spike_flag
+        + 0.15 * ui_spike_flag
     )
 
     # clamp

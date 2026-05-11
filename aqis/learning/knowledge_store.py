@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from aqis.core.config import get_config
@@ -23,7 +23,7 @@ class KnowledgeStore:
             raise ValueError("run_summary must include testName")
 
         test_dir = self._safe_test_dir(test_name)
-        timestamp = str(run_summary.get("timestamp") or datetime.now(UTC).strftime("%Y%m%dT%H%M%S.%fZ"))
+        timestamp = str(run_summary.get("timestamp") or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ"))
         path = test_dir / f"knowledge_{timestamp}.json"
         with path.open("w", encoding="utf-8") as handle:
             json.dump(run_summary, handle, ensure_ascii=False, indent=2, default=str)

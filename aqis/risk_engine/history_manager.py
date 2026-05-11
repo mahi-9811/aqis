@@ -1,7 +1,7 @@
 # python
 from typing import Dict, List, Any
 from pathlib import Path
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 import json
 from aqis.core.config import get_config
 
@@ -32,7 +32,7 @@ class RunHistoryManager:
         """
         test_dir = self._safe_test_dir(test_name)
         # Include microseconds so multiple saves in the same second do not collide.
-        ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%S.%fZ")
+        ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
         filename = f"run_{ts}.json"
         path = test_dir / filename
         try:
